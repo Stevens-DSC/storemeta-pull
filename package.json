@@ -8,5 +8,18 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@jonstuebe/scraper": "^0.2.0",
+    "dom-parser": "^0.1.6",
+    "dotenv": "^8.2.0",
+    "htmlmetaparser": "^2.1.1",
+    "htmlparser2": "^3.4.0",
+    "jsdom": "^16.4.0",
+    "node-fetch": "^2.6.1",
+    "node-microdata-scraper": "^0.0.5",
+    "scrape-schema": "^0.0.3",
+    "striptags": "^3.1.1",
+    "xml-parse": "^0.4.0"
+  }
 }
