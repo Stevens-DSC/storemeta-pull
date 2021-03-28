@@ -45,6 +45,7 @@ function parseMicrocode(html, url) {
 async function getProductMeta(homeURL, productURL, storename) {
     const req = await fetch(productURL)
     const rawHTML = await req.text()
+
     const parsed = await parseMicrocode(rawHTML, productURL)
 
     let { rdfa, microdata } = parsed
