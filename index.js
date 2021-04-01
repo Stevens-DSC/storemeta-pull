@@ -6,23 +6,36 @@ const fetchAllStores = require('./utils/fetchAllStores')
 
 const fetch = require('node-fetch')
 
+require('dotenv').config()
+
+
+if(!process.env.HOST_URL) {
+    process.env.HOST_URL = "https://us-central1-dsc-marketplace.cloudfunctions.net"
+}
+
+const {HOST_URL} = process.env
+    
+okay("Using host URL ", HOST_URL)
+
+let only = false
+let ONLY_DO = ""
+if(process.env.ONLY_DO) {
+    only = true
+    ONLY_DO = process.env.ONLY_DO
+    console.log("ONLY DOING " + ONLY_DO)
+}
 
 const parser = require('./parse/parser')
 
 async function _() {
-    require('dotenv').config()
 
     log("Timestamp: ", unix, " / ", new Date(unix).toGMTString())
 
     log("Evaluating environment variables...")
     
-    if(!process.env.HOST_URL) {
-        process.env.HOST_URL = "https://us-central1-dsc-marketplace.cloudfunctions.net"
-    }
+
     
-    const {HOST_URL} = process.env
-    
-    okay("Using host URL ", HOST_URL)
+
     
     if(!process.env.KEY) {
         throw("You must use a KEY environment variable (or with .env file) to connect to server.")
@@ -30,42 +43,29 @@ async function _() {
     
     okay("Read authentication key")
 
-    const allStores = await fetchAllStores(HOST_URL)
+    let allStores = await fetchAllStores(HOST_URL)
+
+    if(only)
+        allStores = allStores.filter(a=>a.shortname == ONLY_DO)
 
     okay("Fetched ", allStores.length, " stores from server!")
 
     total = allStores.length
     let promises = []
     let payload = []
-    for(let store of allStores) {
-        try {
-            log("Updating products for ", (store.shortname || "???"))
-            const type = store['store-type']
-            log("Has store-type ", type)
-            if(!parser[type]) {
-                throw("No parser found for store type.")
-            }
-            let a = (parser[type](store, HOST_URL))
-            promises.push(a)
-            okay("Queued products for ", (store.shortname || "???"))
-        } catch(e) {
-            fail("Failed queueing products ", (store.shortname || "???"))
-            fail(e)
-        }
-        let values = await Promise.allSettled(promises)
+        
+    let values = await Promise.allSettled(allStores.map(runStore))
 
-        for(let v of values) {
-            let { status } = v
-            if(status == "rejected") {
-                fail("Failed fetching product: " + v.reason)
-                continue;
-            }
-            let { value } = v
-            for(let a of value)
-                payload.push(a)
-            success++
+    for(let v of values) {
+        let { status } = v
+        if(status == "rejected") {
+            fail("Failed fetching product: " + v.reason)
+            continue;
         }
-
+        let { value } = v
+        for(let a of value)
+            payload.push(a)
+        success++
     }
 
     const build = JSON.stringify({
@@ -83,6 +83,24 @@ async function _() {
   log(await rawResponse.text())
 
 
+}
+
+async function runStore(store) {
+    try {
+        log("Updating products for ", (store.shortname || "???"))
+        const type = store['store-type']
+        log("Has store-type ", type)
+        if(!parser[type]) {
+            throw("No parser found for store type.")
+        }
+        okay("Queued products for ", (store.shortname || "???"))
+        let a = await (parser[type](store, HOST_URL))
+        return a
+    } catch(e) {
+        fail("Failed queueing products ", (store.shortname || "???"))
+        fail(e)
+        console.log(e)
+    }
 }
 
 _().then(result => {

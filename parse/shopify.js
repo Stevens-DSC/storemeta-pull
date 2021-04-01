@@ -15,14 +15,17 @@ async function parse(store, HOST_URL) {
     const productLinks = await getAllProductLinks(homeURL)
     okay("Loaded ", productLinks.length, " product links")
     let payload = []
-    for (let link of productLinks) {
-        try {
-            payload.push(await getProductMeta(homeURL, link, shortname))
-        } catch (e) {
-            fail("Failed loading product link ", link)
-            fail(e)
+    const rs = await Promise.allSettled(productLinks.map(link => getProductMeta(homeURL, link, shortname)))
+    for (let r of rs) {
+        // console.log(link)
+        if(r.status == 'fulfilled') {
+            payload.push(r.value)
+        } else {
+            fail("Failed loading product link ")
+            fail(JSON.stringify(r))
         }
     }
+    // payload = payload.map()
     payload.forEach(a=> a.seller=shortname )
     okay("Successfully loaded ", payload.length, " product meta into memory")
     return payload
@@ -42,28 +45,59 @@ function parseMicrocode(html, url) {
     })
 }
 
-async function getProductMeta(homeURL, productURL, storename) {
-    const req = await fetch(productURL)
-    const rawHTML = await req.text()
+function getDesc(microdata) {
+    try {
+        return microdata[1].offers[0].description[0]
+    }catch(e) {}
 
-    const parsed = await parseMicrocode(rawHTML, productURL)
-
-    let { rdfa, microdata } = parsed
-    const builder = {
-        description: microdata[1].offers[0].description[0],
-        displayname: rdfa[0]['og:title'][0],
-        tags: [],
-        image: rdfa[0]['og:image:secure_url'][0],
-        price: parseFloat(rdfa[0]['og:price:amount']),
-        currency: rdfa[0]['og:price:currency'][0],
-        url: rdfa[0]['og:url'][0] || productURL,
-        shortcode: storename + '-' + productURL.substring(homeURL.length).split('/').reverse()[0]
-    }
-    return builder
-
+    try {
+        return microdata[1].description[0]
+    }catch(e) {}
+    return ""
 }
 
+async function getProductMeta(homeURL, productURL, storename) {
+    // console.log("query " + productURL)
+    const req = await fetch(productURL)
+    const rawHTML = await req.text()
+    
+    const parsed = await parseMicrocode(rawHTML, productURL)
+    // console.log(parsed)
+
+    let { rdfa, microdata } = parsed
+    try {
+        // console.log(microdata)
+        const builder = {
+            description: getDesc(microdata),
+            displayname: rdfa[0]['og:title'][0],
+            tags: [],
+            image: rdfa[0]['og:image:secure_url'][0],
+            price: parseFloat(rdfa[0]['og:price:amount']),
+            currency: rdfa[0]['og:price:currency'][0],
+            url: rdfa[0]['og:url'][0] || productURL,
+            shortcode: storename + '-' + productURL.substring(homeURL.length).split('/').reverse()[0]
+            
+        }
+        // console.log(builder)
+        // process.exit(0)
+        return builder
+    }catch(e) {
+        console.log(e)
+    }
+
+
+    return {}
+
+}
+let done = 0
+let wait = time => new Promise((r,rj)=> setTimeout(r,time))
 async function getAllProductLinks(homeURL) {
+    done++
+    if(done > 20) {
+        console.log("Breathing for 200ms...")
+        await wait(time)
+        done = 0
+    }
     const req = await fetch(homeURL + '/sitemap.xml')
     const rawXML = await req.text()
     let obj = xml.parse(rawXML)
